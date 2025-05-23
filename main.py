@@ -1,23 +1,27 @@
-
 import logging
-import sqlite3
-import pandas as pd
-from datetime import datetime, timedelta
-from math import radians, cos, sin, asin, sqrt
 import os
 import io
-from flask import Flask, request
-from telegram import (
-    Update, ReplyKeyboardMarkup, KeyboardButton,
-    InlineKeyboardButton, InlineKeyboardMarkup
-)
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, MessageHandler,
-    CallbackQueryHandler, filters, ContextTypes, ConversationHandler
-)
-import asyncio
-import threading
+import sqlite3
+import pandas as pd
+from flask import Flask, request, Response
+from datetime import datetime, timedelta
+from math import radians, cos, sin, asin, sqrt
 
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
+    ContextTypes, ConversationHandler, filters
+)
+
+# --- Flask ---
+flask_app = Flask(__name__)
+
+# --- Telegram init ---
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-render-url/webhook
+application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+# --- Константы и переменные ---
 OFFICE_LAT = 57.133063
 OFFICE_LON = 65.506559
 MAX_DISTANCE_METERS = 100
@@ -25,6 +29,7 @@ ADMIN_CHAT_ID = 1187398378
 ASK_NAME = 1
 report_tables = {}
 
+# --- База данных ---
 conn = sqlite3.connect("attendance.db", check_same_thread=False)
 cursor = conn.cursor()
 cursor.execute('''CREATE TABLE IF NOT EXISTS employees (
@@ -41,10 +46,10 @@ cursor.execute('''CREATE TABLE IF NOT EXISTS tardiness (
     user_id INTEGER, date TEXT, time_in TEXT, delay_minutes INTEGER)''')
 conn.commit()
 
+# --- Логгирование ---
 logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
-application = None
 
+# --- Утилиты ---
 def haversine(lat1, lon1, lat2, lon2):
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
     dlat = lat2 - lat1
@@ -56,6 +61,7 @@ def is_registered(user_id):
     cursor.execute("SELECT name FROM employees WHERE user_id=?", (user_id,))
     return cursor.fetchone()
 
+# --- Хендлеры ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     if is_registered(user_id):
@@ -66,7 +72,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def save_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.message.text.strip()
     user_id = update.message.from_user.id
-    cursor.execute("REPLACE INTO employees (user_id, name, expected_start_time) VALUES (?, ?, ?)", (user_id, name, "10:00"))
+    cursor.execute("REPLACE INTO employees (user_id, name) VALUES (?, ?)", (user_id, name))
     conn.commit()
     await update.message.reply_text(f"Спасибо, {name}!")
     return await show_main_menu(update)
@@ -114,15 +120,17 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cursor.execute("INSERT INTO attendance (user_id, username, date, time_in, lat_in, lon_in) VALUES (?, ?, ?, ?, ?, ?)",
                            (user_id, username, date_str, time_str, lat, lon))
             conn.commit()
-            expected_dt = datetime.combine(now.date(), datetime.strptime("10:00", "%H:%M").time())
-            delay = int((now - expected_dt).total_seconds() / 60)
-            if delay > 0:
+            cursor.execute("SELECT expected_start_time FROM employees WHERE user_id=?", (user_id,))
+            expected = cursor.fetchone()[0]
+            expected_dt = datetime.strptime(expected, "%H:%M")
+            actual_dt = datetime.strptime(time_str, "%H:%M:%S")
+            delay = int((actual_dt - expected_dt).total_seconds() / 60)
+            if delay > 5:
                 cursor.execute("INSERT INTO tardiness (user_id, date, time_in, delay_minutes) VALUES (?, ?, ?, ?)",
                                (user_id, date_str, time_str, delay))
                 conn.commit()
                 await update.message.reply_text(f"⚠️ Опоздание на {delay} минут.")
-            else:
-                await update.message.reply_text(f"✅ Приход отмечен. Расстояние: {int(dist)} м. Без опоздания.")
+            await update.message.reply_text(f"✅ Приход отмечен. Расстояние: {int(dist)} м.")
         else:
             await update.message.reply_text(f"❌ Вне офиса. Расстояние: {int(dist)} м.")
     elif action == "ушел":
@@ -134,7 +142,6 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"✅ Уход отмечен. Расстояние: {int(dist)} м.")
         else:
             await update.message.reply_text("❗ Сначала отметь приход.")
-
     await show_main_menu(update)
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -188,8 +195,7 @@ async def handle_report_button(update: Update, context: ContextTypes.DEFAULT_TYP
     reply_markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("📎 Скачать таблицу", callback_data=f"download_excel_{label}")]
     ])
-    await query.edit_message_text("
-".join(report_lines), reply_markup=reply_markup)
+    await query.edit_message_text("\n".join(report_lines), reply_markup=reply_markup)
 
 async def handle_excel_download(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -204,47 +210,37 @@ async def handle_excel_download(update: Update, context: ContextTypes.DEFAULT_TY
     df.to_excel(excel_buffer, index=False)
     excel_buffer.seek(0)
 
-    await context.bot.send_document(chat_id=user_id, document=excel_buffer, filename="report.xlsx")
-
-@app.post("/webhook")
-async def webhook():
-    data = request.get_json()
-    update = Update.de_json(data, application.bot)
-    await application.process_update(update)
-    return "ok", 200
-
-@app.get("/")
-def root():
-    return "Бот работает!"
-
-async def main():
-    global application
-    token = os.getenv("TELEGRAM_TOKEN")
-    application = ApplicationBuilder().token(token).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", start)],
-        states={ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_name)]},
-        fallbacks=[],
-        allow_reentry=True
+    await context.bot.send_document(
+        chat_id=user_id,
+        document=excel_buffer,
+        filename="report.xlsx"
     )
 
-    application.add_handler(conv_handler)
-    application.add_handler(CommandHandler("report", report))
-    application.add_handler(CallbackQueryHandler(handle_report_button, pattern="^report_"))
-    application.add_handler(CallbackQueryHandler(handle_excel_download, pattern="^download_excel_"))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_action))
-    application.add_handler(MessageHandler(filters.LOCATION, handle_location))
+async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Неизвестная команда. Используй кнопки или /report.")
 
-    await application.initialize()
-    await application.start()
-    webhook_url = os.getenv("WEBHOOK_URL")
-    await application.bot.set_webhook(webhook_url)
-    print("Webhook установлен:", webhook_url)
+# --- Flask Webhook Route ---
+@flask_app.route("/webhook", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return Response("ok", status=200)
 
-def run_flask():
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+# --- Регистрация хендлеров ---
+application.add_handler(ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_name)]},
+    fallbacks=[], allow_reentry=True
+))
+application.add_handler(CommandHandler("report", report))
+application.add_handler(CallbackQueryHandler(handle_report_button, pattern="^report_"))
+application.add_handler(CallbackQueryHandler(handle_excel_download, pattern="^download_excel_"))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_action))
+application.add_handler(MessageHandler(filters.LOCATION, handle_location))
+application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
+# --- Запуск ---
 if __name__ == "__main__":
-    threading.Thread(target=run_flask, daemon=True).start()
-    asyncio.run(main())
+    import asyncio
+    asyncio.run(application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook"))
+    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

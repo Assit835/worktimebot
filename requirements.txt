@@ -1,4 +1,5 @@
-python-telegram-bot==20.7
-Flask[async]
+python-telegram-bot[webhooks]
+Flask
+gunicorn
 pandas
 openpyxl
