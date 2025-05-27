@@ -3,6 +3,7 @@ import os
 import io
 import sqlite3
 import pandas as pd
+import re
 from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 
@@ -113,17 +114,20 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             conn.commit()
 
             cursor.execute("SELECT expected_start_time FROM employees WHERE user_id=?", (user_id,))
-            expected = cursor.fetchone()[0]
-            if not res or not res[0]:
-               expected = "10:00"
+            res = cursor.fetchone()
+            if res is None or res[0] is None:
+            expected = "10:00"
             else:
-               expected = res[0]
+            expected = res[0]
+
+            if not re.match(r"^\d{1,2}:\d{2}$", expected):
+            expected = "10:00"
 
             today = datetime.now().date()
-            expected_dt = datetime.combine(today, datetime.strptime(expected, "%H:%M").time())
+            expected_dt = datetime.combine(today, datetime.strptime(expected, "%H:%M").time())          
             actual_dt = datetime.combine(today, datetime.strptime(time_str, "%H:%M:%S").time())
-
             delay = (actual_dt - expected_dt).total_seconds() / 60
+
 
             logging.info(f"User {user_id} expected: {expected_dt.time()}, actual: {actual_dt.time()}, delay: {delay} min")
 
