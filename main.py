@@ -142,7 +142,7 @@ if action == "ушел":
         await update.message.reply_text(f"✅ Уход отмечен. Расстояние: {int(dist)} м.")
     else:
         await update.message.reply_text("❗ Сначала отметь приход.")
-    elif action == "ушел":
+    if action == "ушел":
         cursor.execute("SELECT * FROM attendance WHERE user_id=? AND date=? AND time_out IS NULL", (user_id, date_str))
         if cursor.fetchone():
             cursor.execute("UPDATE attendance SET time_out=?, lat_out=?, lon_out=? WHERE user_id=? AND date=?",
