@@ -3,7 +3,7 @@ import os
 import io
 import sqlite3
 import pandas as pd
-from datetime import time
+from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
