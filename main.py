@@ -127,7 +127,7 @@ if action == "пришел":
             cursor.execute("INSERT INTO tardiness (user_id, date, time_in, delay_minutes) VALUES (?, ?, ?, ?)",
                            (user_id, date_str, time_str, delay))
             conn.commit()
-            await update.message.reply_text(f"⚠️ Опоздание на {delay} минут.")
+        await update.message.reply_text(f"⚠️ Опоздание на {delay} минут.")
 
         await update.message.reply_text(f"✅ Приход отмечен. Расстояние: {int(dist)} м.")
     else:
