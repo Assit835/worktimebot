@@ -107,31 +107,41 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn.commit()
 
 # Внутри if action == "пришел":
-if dist <= MAX_DISTANCE_METERS:
-    cursor.execute("INSERT INTO attendance (user_id, username, date, time_in, lat_in, lon_in) VALUES (?, ?, ?, ?, ?, ?)",
-                   (user_id, username, date_str, time_str, lat, lon))
-    conn.commit()
-
-    cursor.execute("SELECT expected_start_time FROM employees WHERE user_id=?", (user_id,))
-    expected = cursor.fetchone()[0]  # например, "10:00"
-
-    # Преобразуем в datetime с текущей датой
-    today = datetime.now().date()
-    expected_dt = datetime.combine(today, datetime.strptime(expected, "%H:%M").time())
-    actual_dt = datetime.combine(today, datetime.strptime(time_str, "%H:%M:%S").time())
-
-    delay = (actual_dt - expected_dt).total_seconds() / 60  # в минутах
-
-    if delay > 0:  # если пришёл позже 10:00
-        delay = int(delay)
-        cursor.execute("INSERT INTO tardiness (user_id, date, time_in, delay_minutes) VALUES (?, ?, ?, ?)",
-                       (user_id, date_str, time_str, delay))
+if action == "пришел":
+    if dist <= MAX_DISTANCE_METERS:
+        cursor.execute("INSERT INTO attendance (user_id, username, date, time_in, lat_in, lon_in) VALUES (?, ?, ?, ?, ?, ?)",
+                       (user_id, username, date_str, time_str, lat, lon))
         conn.commit()
-        await update.message.reply_text(f"⚠️ Опоздание на {delay} минут.")
 
-    await update.message.reply_text(f"✅ Приход отмечен. Расстояние: {int(dist)} м.")
-else:
-    await update.message.reply_text(f"❌ Вне офиса. Расстояние: {int(dist)} м.")
+        cursor.execute("SELECT expected_start_time FROM employees WHERE user_id=?", (user_id,))
+        expected = cursor.fetchone()[0]
+
+        today = datetime.now().date()
+        expected_dt = datetime.combine(today, datetime.strptime(expected, "%H:%M").time())
+        actual_dt = datetime.combine(today, datetime.strptime(time_str, "%H:%M:%S").time())
+
+        delay = (actual_dt - expected_dt).total_seconds() / 60
+
+        if delay > 0:
+            delay = int(delay)
+            cursor.execute("INSERT INTO tardiness (user_id, date, time_in, delay_minutes) VALUES (?, ?, ?, ?)",
+                           (user_id, date_str, time_str, delay))
+            conn.commit()
+            await update.message.reply_text(f"⚠️ Опоздание на {delay} минут.")
+
+        await update.message.reply_text(f"✅ Приход отмечен. Расстояние: {int(dist)} м.")
+    else:
+        await update.message.reply_text(f"❌ Вне офиса. Расстояние: {int(dist)} м.")
+
+elif action == "ушел":
+    cursor.execute("SELECT * FROM attendance WHERE user_id=? AND date=? AND time_out IS NULL", (user_id, date_str))
+    if cursor.fetchone():
+        cursor.execute("UPDATE attendance SET time_out=?, lat_out=?, lon_out=? WHERE user_id=? AND date=?",
+                       (time_str, lat, lon, user_id, date_str))
+        conn.commit()
+        await update.message.reply_text(f"✅ Уход отмечен. Расстояние: {int(dist)} м.")
+    else:
+        await update.message.reply_text("❗ Сначала отметь приход.")
     elif action == "ушел":
         cursor.execute("SELECT * FROM attendance WHERE user_id=? AND date=? AND time_out IS NULL", (user_id, date_str))
         if cursor.fetchone():
