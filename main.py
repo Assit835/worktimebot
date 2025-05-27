@@ -3,7 +3,6 @@ import os
 import io
 import sqlite3
 import pandas as pd
-from flask import Flask, request, Response
 from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 
@@ -12,14 +11,6 @@ from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
     ContextTypes, ConversationHandler, filters
 )
-
-# --- Flask ---
-flask_app = Flask(__name__)
-
-# --- Telegram init ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # https://your-render-url/webhook
-application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
 # --- Константы и переменные ---
 OFFICE_LAT = 57.133063
@@ -219,14 +210,12 @@ async def handle_excel_download(update: Update, context: ContextTypes.DEFAULT_TY
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Неизвестная команда. Используй кнопки или /report.")
 
-# --- Flask Webhook Route ---
-@flask_app.route("/webhook", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return Response("ok", status=200)
+# --- Инициализация приложения ---
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Например: https://your-app.onrender.com
 
-# --- Регистрация хендлеров ---
+application = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
 application.add_handler(ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={ASK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_name)]},
@@ -239,8 +228,10 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_a
 application.add_handler(MessageHandler(filters.LOCATION, handle_location))
 application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-# --- Запуск ---
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(application.bot.set_webhook(url=f"{WEBHOOK_URL}/webhook"))
-    flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        url_path="webhook",
+        webhook_url=f"{WEBHOOK_URL}/webhook"
+    )
