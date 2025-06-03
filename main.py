@@ -264,12 +264,19 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def do_HEAD(self):
+        if self.path == "/":
+            self.send_response(200)
+            self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
 def run_health_server():
     server = HTTPServer(("0.0.0.0", 8080), HealthHandler)
     server.serve_forever()
 
 threading.Thread(target=run_health_server, daemon=True).start()
-
 
 if __name__ == "__main__":
     application.run_webhook(
