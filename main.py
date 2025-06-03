@@ -6,6 +6,8 @@ import pandas as pd
 import re
 from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
+from datetime import timezone
+import pytz
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -93,7 +95,9 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = user.username or user.first_name
 
     dist = haversine(OFFICE_LAT, OFFICE_LON, lat, lon)
-    now = datetime.now()
+    local_tz = pytz.timezone("Asia/Yekaterinburg")  # замени на нужную тебе зону
+    now = datetime.now(local_tz)
+
     date_str = now.strftime("%Y-%m-%d")
     time_str = now.strftime("%H:%M:%S")
 
@@ -125,8 +129,8 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 expected = "10:00"
 
             today = datetime.now().date()
-            expected_dt = datetime.combine(today, datetime.strptime(expected, "%H:%M").time())          
-            actual_dt = datetime.combine(today, datetime.strptime(time_str, "%H:%M:%S").time())
+            expected_dt = local_tz.localize(datetime.combine(today, datetime.strptime(expected, "%H:%M").time()))
+            actual_dt = now  # он уже с нужной зоной
             delay = (actual_dt - expected_dt).total_seconds() / 60
 
 
