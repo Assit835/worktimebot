@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 from datetime import timezone
 import pytz
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -251,6 +253,23 @@ application.add_handler(CallbackQueryHandler(handle_excel_download, pattern="^do
 application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_action))
 application.add_handler(MessageHandler(filters.LOCATION, handle_location))
 application.add_handler(MessageHandler(filters.COMMAND, unknown))
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", 8080), HealthHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_health_server, daemon=True).start()
+
 
 if __name__ == "__main__":
     application.run_webhook(
