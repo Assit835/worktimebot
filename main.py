@@ -10,6 +10,7 @@ from datetime import timezone
 import pytz
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from aiohttp import web
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -278,10 +279,17 @@ def run_health_server():
 
 threading.Thread(target=run_health_server, daemon=True).start()
 
+async def health_check(request):
+    return web.Response(text="OK")
+
 if __name__ == "__main__":
-    application.run_webhook(
-        listen="0.0.0.0",
-        port=int(os.environ["PORT"]),
-        url_path="webhook",
-        webhook_url=f"{WEBHOOK_URL}/webhook"
-    )
+    app = application.web_app
+app.router.add_get("/", health_check)
+
+application.run_webhook(
+    listen="0.0.0.0",
+    port=int(os.environ["PORT"]),
+    url_path="webhook",
+    webhook_url=f"{WEBHOOK_URL}/webhook"
+)
+
