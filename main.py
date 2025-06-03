@@ -122,7 +122,7 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
             if not re.match(r"^\d{1,2}:\d{2}$", expected):
-            expected = "10:00"
+                expected = "10:00"
 
             today = datetime.now().date()
             expected_dt = datetime.combine(today, datetime.strptime(expected, "%H:%M").time())          
