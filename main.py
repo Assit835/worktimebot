@@ -116,9 +116,10 @@ async def handle_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             cursor.execute("SELECT expected_start_time FROM employees WHERE user_id=?", (user_id,))
             res = cursor.fetchone()
             if res is None or res[0] is None:
-            expected = "10:00"
+                expected = "10:00"
             else:
-            expected = res[0]
+                expected = res[0]
+
 
             if not re.match(r"^\d{1,2}:\d{2}$", expected):
             expected = "10:00"
