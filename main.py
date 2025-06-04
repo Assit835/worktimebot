@@ -9,6 +9,8 @@ from math import radians, cos, sin, asin, sqrt
 from datetime import timezone
 import pytz
 from aiohttp import web
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -256,7 +258,24 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_a
 application.add_handler(MessageHandler(filters.LOCATION, handle_location))
 application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_health_server():
+    server = HTTPServer(("0.0.0.0", 8080), HealthHandler)
+    server.serve_forever()
+
+
 if __name__ == "__main__":
+threading.Thread(target=run_health_server, daemon=True).start()
+
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
