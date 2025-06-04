@@ -269,7 +269,7 @@ class HealthHandler(BaseHTTPRequestHandler):
             self.end_headers()
 
 def run_health_server():
-    server = HTTPServer(("0.0.0.0", 8080), HealthHandler)
+    server = HTTPServer(("0.0.0.0", int(os.environ["PORT"])), HealthHandler)
     server.serve_forever()
 
 
