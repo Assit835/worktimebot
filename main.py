@@ -257,8 +257,6 @@ application.add_handler(MessageHandler(filters.LOCATION, handle_location))
 application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
 if __name__ == "__main__":
-    application.web_app.router.add_get("/", health_check)
-
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
