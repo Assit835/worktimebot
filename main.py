@@ -5,18 +5,18 @@ import sqlite3
 import logging
 import pandas as pd
 import re
-import asyncio
+import threading
 from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler,
     ContextTypes, ConversationHandler, filters
 )
-from aiohttp import web
 
-# --- Константы и переменные ---
+# --- Константы ---
 OFFICE_LAT = 57.133063
 OFFICE_LON = 65.506559
 MAX_DISTANCE_METERS = 100
@@ -73,10 +73,30 @@ async def show_main_menu(update: Update):
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Неизвестная команда. Используй кнопки или /report.")
 
-async def health_check(request):
-    return web.Response(text="OK")
+# --- Healthcheck сервер для Render и UptimeRobot ---
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+        else:
+            self.send_response(404)
+            self.end_headers()
 
-# --- Запуск ---
+    def do_HEAD(self):
+        if self.path == "/":
+            self.send_response(200)
+            self.end_headers()
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_healthcheck_server():
+    server = HTTPServer(("0.0.0.0", 8080), HealthHandler)
+    server.serve_forever()
+
+# --- Telegram запуск ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
@@ -89,16 +109,12 @@ application.add_handler(ConversationHandler(
 ))
 application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
-async def main():
-    runner = web.AppRunner(application)
-    await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", int(os.environ["PORT"]))
-    runner.app.router.add_get("/", health_check)
-    await application.initialize()
-    await application.start()
-    await site.start()
-    print("✅ Bot is running on Render")
-    await asyncio.Event().wait()
-
+# Запуск Telegram и / сервера
 if __name__ == "__main__":
-    asyncio.run(main())
+    threading.Thread(target=run_healthcheck_server, daemon=True).start()
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=int(os.environ.get("PORT", 5000)),
+        url_path="webhook",
+        webhook_url=f"{WEBHOOK_URL}/webhook"
+    )
