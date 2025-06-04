@@ -274,7 +274,7 @@ def run_health_server():
 
 
 if __name__ == "__main__":
-threading.Thread(target=run_health_server, daemon=True).start()
+    threading.Thread(target=run_health_server, daemon=True).start()
 
     application.run_webhook(
         listen="0.0.0.0",
