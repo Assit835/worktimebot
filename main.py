@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from math import radians, cos, sin, asin, sqrt
 from datetime import timezone
 import pytz
+from aiohttp import web
 
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -233,6 +234,10 @@ async def handle_excel_download(update: Update, context: ContextTypes.DEFAULT_TY
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Неизвестная команда. Используй кнопки или /report.")
 
+async def health_check(request):
+    return web.Response(text="OK")
+
+
 # --- Инициализация приложения ---
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")  # Например: https://your-app.onrender.com
@@ -252,6 +257,8 @@ application.add_handler(MessageHandler(filters.LOCATION, handle_location))
 application.add_handler(MessageHandler(filters.COMMAND, unknown))
 
 if __name__ == "__main__":
+    application.web_app.router.add_get("/", health_check)
+
     application.run_webhook(
         listen="0.0.0.0",
         port=int(os.environ.get("PORT", 5000)),
