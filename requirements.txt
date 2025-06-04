@@ -1,6 +1,7 @@
-python-telegram-bot[webhooks]
+python-telegram-bot[webhooks]>=21.0
 Flask
 gunicorn
 pandas
 openpyxl
-aiohttp
+aiohttp>=3.9
+
